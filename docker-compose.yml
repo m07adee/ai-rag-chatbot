@@ -1,0 +1,57 @@
+# AI Knowledge-Base Chatbot
+#   cp .env.example .env   (fill in your keys)
+#   docker compose up -d --build                 -> site + chat at http://localhost:8091
+#   docker compose --profile public up -d        -> also a public https://*.trycloudflare.com link
+#                                                   (docker compose logs tunnel)
+name: ai-rag-chatbot
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
+      POSTGRES_DB: rag
+    volumes:
+      - rag_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rag:${POSTGRES_PASSWORD:-rag}@db:5432/rag
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  site:
+    build:
+      context: .
+      dockerfile: site/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8091:8080"
+    depends_on:
+      - api
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["public"]
+    command: tunnel --no-autoupdate --url http://site:8080
+    depends_on:
+      - site
+
+volumes:
+  rag_db:
