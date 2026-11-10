@@ -4,6 +4,8 @@ A production-style **Retrieval-Augmented Generation** chatbot for small business
 
 Demo business: *Lumina Dental Studio*, a **fictional** clinic in Istanbul.
 
+**🔗 Live demo:** https://ai-rag-chatbot-dusky.vercel.app (try asking in English, Arabic or Turkish)
+
 ![Landing page](screenshots/1-landing.png)
 
 | Chat with cited sources | Admin dashboard |
@@ -57,6 +59,28 @@ Browser ──► Caddy (static Next.js site + /api proxy)
 - Answers in about **2–3 seconds** with cited sources, in 3 languages.
 - Off-topic questions such as "Do you do hair transplants?" are answered honestly and offered a hand-off, never invented.
 - A new document uploaded in the dashboard is answerable **immediately**.
+
+## Two editions, one codebase
+| | Docker edition | Vercel edition (live demo) |
+|---|---|---|
+| API | Python FastAPI (`api/`) | Next.js route handlers (`web/src/app/api/**/route.vercel.ts`) |
+| Database | Postgres + pgvector (container) | Neon serverless Postgres |
+| Retrieval | Local multilingual embeddings + full text, fused with RRF | LLM query translation to English keywords + Postgres full text |
+| Hand-off | Webhook to the n8n lead agent (scored and emailed) | Saved to a **Leads** tab in the dashboard, with an optional webhook |
+| Hosting | Any VPS (`docker compose up`) | Serverless; always on, even when your machine is off |
+
+`next.config.ts` switches with `STATIC_EXPORT=1`, which the Docker build sets. The `.vercel.ts` page extension is only enabled for the Vercel build.
+
+### Deploy the Vercel edition
+```bash
+cd web
+vercel link
+vercel integration add neon       # creates the database and sets DATABASE_URL
+vercel env add ANTHROPIC_API_KEY production
+vercel env add ADMIN_TOKEN production
+vercel deploy --prod
+```
+Tables are created and the demo knowledge base is seeded on the first request.
 
 ## Run it
 ```bash
