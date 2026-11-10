@@ -95,6 +95,7 @@ export function ChatPanel({ lang, t, onClose }: { lang: Lang; t: Dict["chat"]; o
             patchLast((x) => ({ ...x, sources: m.sources }));
           },
           onDelta: (d) => patchLast((x) => ({ ...x, text: x.text + d, pending: false })),
+          onReplace: (text) => patchLast((x) => ({ ...x, text, sources: [], pending: false })),
           onDone: (d) => {
             patchLast((x) => ({ ...x, pending: false, handoff: d.handoff }));
             if (d.handoff) setForm((f) => (f === "sent" ? f : "open"));

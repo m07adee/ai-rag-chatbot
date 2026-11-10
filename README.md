@@ -28,6 +28,8 @@ Clinics, agencies and shops answer the same questions all day (prices, hours, in
   ```html
   <script src="https://YOUR-DOMAIN/widget.js" data-lang="en" async></script>
   ```
+- **Stays on topic.** A parallel gatekeeper call classifies every message as in-scope or off-topic (coding, calculators, poems, translation, trivia, prompt-injection, "ignore your instructions"…) and returns a fixed polite refusal without calling the answer model. A server-side guard also cuts off any reply that starts producing code. Tested against 8 jailbreak and off-topic attempts in 3 languages.
+- **Gateway-proof prompting.** Instructions are sent in the user turn as well as in `system`, because some Anthropic-compatible gateways drop the system prompt.
 - **Safety.**
   - The admin API is protected with a Bearer token (constant-time compare).
   - Per-IP rate limits, plus input and upload size limits.

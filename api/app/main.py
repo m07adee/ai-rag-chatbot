@@ -22,7 +22,9 @@ from pydantic import BaseModel, Field
 from . import db
 from .config import settings
 from .ingest import IngestError, extract_text, fetch_url, seed_knowledge, store_document
-from .llm import stream_answer
+import asyncio
+
+from .llm import OFF_TOPIC_REPLY, is_in_scope, stream_answer
 from .rag import embed, retrieve
 
 log = logging.getLogger("rag")
@@ -113,21 +115,42 @@ async def chat(body: ChatIn, request: Request):
             ).fetchall()
         return str(conv["id"]), [dict(h) for h in hist], retrieve(question)
 
-    conv_id, history, passages = await run_in_threadpool(prepare)
+    def last_bot_message() -> str:  # lets the gate understand short follow-ups like "yes please"
+        if not body.conversation_id:
+            return ""
+        with db.conn() as c:
+            row = c.execute("SELECT content FROM messages WHERE conv_id=%s AND role='assistant' ORDER BY id DESC LIMIT 1",
+                            (body.conversation_id,)).fetchone()
+        return row["content"] if row else ""
+
+    last_bot = await run_in_threadpool(last_bot_message)
+    (conv_id, history, passages), in_scope = await asyncio.gather(
+        run_in_threadpool(prepare), is_in_scope(question, last_bot))
+    if not in_scope:
+        passages = []
     sources = [{"n": i, "title": p["title"], "snippet": p["content"][:220]} for i, p in enumerate(passages, 1)]
 
     async def events():
         yield sse("meta", {"conversation_id": conv_id, "sources": sources})
-        state, parts = {"handoff": False}, []
+        state, parts = {"handoff": False, "blocked": False}, []
         try:
-            async for delta in stream_answer(question, passages, history, lang, state):
-                parts.append(delta)
-                yield sse("delta", {"text": delta})
+            if not in_scope:  # off-topic: fixed polite refusal, no model call
+                refusal = OFF_TOPIC_REPLY[lang].format(b=settings.business_name)
+                parts.append(refusal)
+                yield sse("delta", {"text": refusal})
+            else:
+                async for delta in stream_answer(question, passages, history, lang, state):
+                    parts.append(delta)
+                    yield sse("delta", {"text": delta})
         except anthropic.APIError as e:
             log.warning("LLM error: %s", e)
             yield sse("error", {"message": "The assistant is temporarily unavailable. Please try again."})
             return
         answer = "".join(parts).strip()
+        if state["blocked"]:  # model drifted into writing code: replace the whole reply
+            answer = OFF_TOPIC_REPLY[lang].format(b=settings.business_name)
+            state["handoff"] = False
+            yield sse("replace", {"text": answer})
 
         def save():
             with db.conn() as c:

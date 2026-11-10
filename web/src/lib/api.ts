@@ -3,6 +3,7 @@ export type Source = { n: number; title: string; snippet: string };
 type Handlers = {
   onMeta: (m: { conversation_id: string; sources: Source[] }) => void;
   onDelta: (text: string) => void;
+  onReplace: (text: string) => void;
   onDone: (d: { handoff: boolean }) => void;
   onError: (message: string) => void;
 };
@@ -35,6 +36,7 @@ export async function streamChat(body: { message: string; lang: string; conversa
       const d = JSON.parse(data);
       if (event === "meta") h.onMeta(d);
       else if (event === "delta") h.onDelta(d.text);
+      else if (event === "replace") h.onReplace(d.text);
       else if (event === "done") h.onDone(d);
       else if (event === "error") h.onError(d.message);
     }
