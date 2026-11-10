@@ -4,6 +4,7 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web ./
+ENV STATIC_EXPORT=1
 RUN npm run build
 
 # 2) serve it with Caddy, proxying /api to the FastAPI service

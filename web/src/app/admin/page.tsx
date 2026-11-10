@@ -10,6 +10,8 @@ type Stats = { documents: number; chunks: number; conversations: number; questio
 type Doc = { id: number; title: string; source: string; kind: string; chunk_count: number; created_at: string };
 type Conv = { id: string; lang: string; handed_off: boolean; updated_at: string; messages: number; transcript: { role: string; content: string; answered: boolean }[] };
 
+type Lead = { id: number; name: string; email: string; phone: string; note: string; lang: string; transcript: string; created_at: string };
+
 const fmt = (d: string) => new Date(d).toLocaleString();
 
 export default function Admin() {
@@ -17,7 +19,8 @@ export default function Admin() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [convs, setConvs] = useState<Conv[]>([]);
-  const [tab, setTab] = useState<"docs" | "chats">("docs");
+  const [leads, setLeads] = useState<Lead[] | null>(null); // null = this edition has no leads endpoint
+  const [tab, setTab] = useState<"docs" | "chats" | "leads">("docs");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -33,14 +36,16 @@ export default function Admin() {
 
   const load = useCallback(async (tk: string) => {
     try {
-      const [s, d, c] = await Promise.all([
+      const [s, d, c, l] = await Promise.all([
         adminFetch<Stats>("/stats", tk),
         adminFetch<Doc[]>("/documents", tk),
         adminFetch<Conv[]>("/conversations", tk),
+        adminFetch<Lead[]>("/leads", tk).catch(() => null), // only the Vercel edition stores leads
       ]);
       setStats(s);
       setDocs(d);
       setConvs(c);
+      setLeads(l);
     } catch (e) {
       if ((e as { status?: number }).status === 401) logout();
       else flash(false, (e as Error).message);
@@ -187,10 +192,12 @@ export default function Admin() {
             )}
 
             <div className="mt-8 flex gap-2">
-              {(["docs", "chats"] as const).map((k) => (
+              {(leads ? (["docs", "chats", "leads"] as const) : (["docs", "chats"] as const)).map((k) => (
                 <button key={k} onClick={() => setTab(k)} type="button" className={`relative rounded-xl px-4 py-2 text-sm font-semibold ${tab === k ? "text-white" : "text-white/50 hover:text-white"}`}>
                   {tab === k && <motion.span layoutId="tab" className="absolute inset-0 rounded-xl bg-white/10" />}
-                  <span className="relative">{k === "docs" ? `📚 Knowledge base (${docs.length})` : `💬 Conversations (${convs.length})`}</span>
+                  <span className="relative">
+                    {k === "docs" ? `📚 Knowledge base (${docs.length})` : k === "chats" ? `💬 Conversations (${convs.length})` : `🙋 Leads (${leads?.length ?? 0})`}
+                  </span>
                 </button>
               ))}
             </div>
@@ -236,7 +243,7 @@ export default function Admin() {
                     </table>
                   </div>
                 </motion.section>
-              ) : (
+              ) : tab === "chats" ? (
                 <motion.section key="chats" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-4 space-y-2">
                   {convs.length === 0 && <p className="py-10 text-center text-white/40">No conversations yet.</p>}
                   {convs.map((c) => (
@@ -261,6 +268,25 @@ export default function Admin() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+                    </div>
+                  ))}
+                </motion.section>
+              ) : (
+                <motion.section key="leads" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-4 grid gap-3 md:grid-cols-2">
+                  {(leads || []).length === 0 && <p className="py-10 text-center text-white/40 md:col-span-2">No leads yet.</p>}
+                  {(leads || []).map((l) => (
+                    <div key={l.id} className="rounded-2xl border border-white/10 bg-white/[.03] p-4 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">{l.name}</span>
+                        <span className="text-xs text-white/40">{fmt(l.created_at)}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        <a href={`mailto:${l.email}`} className="rounded-full bg-teal-400/15 px-2.5 py-1 text-teal-200 hover:bg-teal-400/25">✉️ {l.email}</a>
+                        <a href={`https://wa.me/${l.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-emerald-200 hover:bg-emerald-400/25">💬 {l.phone}</a>
+                        <span className="rounded-full bg-white/10 px-2.5 py-1 uppercase">{l.lang}</span>
+                      </div>
+                      {l.note && <p className="mt-3 text-white/80">“{l.note}”</p>}
+                      {l.transcript && <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-black/30 p-3 font-sans text-xs text-white/60">{l.transcript}</pre>}
                     </div>
                   ))}
                 </motion.section>
